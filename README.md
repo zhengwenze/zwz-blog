@@ -4,6 +4,8 @@
 
 公开仓库：<https://github.com/zhengwenze/zwz-blog>
 
+线上地址：<http://123.56.190.100>
+
 ## 本地查看
 
 ```bash
@@ -22,7 +24,7 @@ npm test
 
 ## 部署
 
-生产环境使用 Nginx 直接托管 `dist/`。完整部署步骤、目录约定和回滚方式见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)。
+生产环境已使用 Nginx 直接托管 `dist/`。完整部署步骤、目录约定、验收状态和回滚方式见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)。
 
 ## 项目结构
 
