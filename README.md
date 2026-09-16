@@ -20,13 +20,13 @@ npm run serve
 npm test
 ```
 
-测试会检查首页、文章页、站内链接、静态资源引用、页面元数据和未清理占位符。
+测试会检查首页、文章页、站内链接、静态资源引用、页面元数据和未清理占位符，并在隔离目录中验证原子发布与失败回滚。
 
 ## CI/CD 与部署
 
 生产环境使用 Nginx 托管不可变的 `dist/` 发布制品。目标流水线在 Pull Request 上执行测试，在 `main` 通过测试后构建制品、通过低权限 `deploy` 用户发布，并在健康检查失败时自动回滚。
 
-CI/CD 仓库实现、GitHub `production` Environment 和生产服务器初始化已完成；工作流尚未推送首跑，自动发布/回滚端到端验收待完成。变量、密钥、服务器初始化、自动/手动回滚和故障定位见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)；公开部署元数据契约见 [docs/ZWZ_BLOG_API.md](docs/ZWZ_BLOG_API.md)。
+CI/CD 仓库实现、GitHub `production` Environment 和生产服务器初始化已完成；工作流尚未推送首跑，自动发布/回滚端到端验收待完成。变量、密钥、服务器初始化、自动/手动回滚和故障定位见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)；公开部署元数据契约见 [docs/ZWZ_BLOG_API.md](docs/ZWZ_BLOG_API.md)；视觉与代码约定见 [docs/ZWZ_BLOG_STYLE.md](docs/ZWZ_BLOG_STYLE.md)。
 
 ## 项目结构
 

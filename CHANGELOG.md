@@ -6,10 +6,10 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- Add a GitHub Actions CI/CD pipeline that tests the exact commit, creates a checksummed immutable artifact, and deploys `main` through the protected `production` environment.
-- Add least-privilege server bootstrap and SSH-hardening scripts for a dedicated `deploy` user with pinned host verification.
-- Add atomic release and manual rollback operations with local and public health checks, SHA validation, and automatic restoration of the previous healthy release.
-- Publish `/deploy-meta.json` as the static deployment provenance contract and document production variables, secrets, troubleshooting, and acceptance evidence.
+- Automatically test and deploy each accepted `main` commit from one checksummed, immutable artifact through the protected `production` environment.
+- Keep routine deployments isolated from server administration with a dedicated least-privilege `deploy` account, pinned host verification, and guided SSH hardening.
+- Switch releases atomically, restore the last healthy version after a failed check, and allow operators to roll back to any validated retained release.
+- Expose `/deploy-meta.json` so an online page can be traced to its exact commit and Actions run, with operations and troubleshooting guidance included.
 
 ### Changed
 

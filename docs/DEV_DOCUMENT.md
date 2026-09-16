@@ -130,11 +130,13 @@ CI 对触发流水线的准确提交执行测试，在发布副本的根目录�
 /var/www/zwz-blog/
 ├── releases/
 │   └── <commit-sha>/
+├── incoming/
+│   └── <run-id>-<attempt>-<commit-sha>/
 ├── .incoming-<commit-sha>/
 └── current -> releases/<commit-sha>
 ```
 
-- 上传包先在 `.incoming-<sha>` 中校验和解压，未完成的目录不会成为 `current`。
+- Actions 先将压缩包与校验文件上传到 `incoming/<run-id>-<attempt>-<sha>`，发布脚本再在 `.incoming-<sha>` 中解压与验证；未完成的目录不会成为 `current`。
 - `deploy/release.sh deploy <sha> <archive.tar.gz> <archive.tar.gz.sha256>` 检查 SHA 格式、校验和、必需文件以及元数据 SHA，然后原子切换 `current`。
 - 必需文件为首页、文章页、CSS 和 `deploy-meta.json`。
 - 日常发布不修改 Nginx，不重启 Nginx，不使用 sudo。
