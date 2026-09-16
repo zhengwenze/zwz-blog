@@ -36,4 +36,3 @@
 ## 五、兼容性
 
 支持当前主流 Chrome、Safari、Edge 和 Firefox。关闭 JavaScript 不影响阅读，因为首版没有运行时 JavaScript 依赖。
-

@@ -64,4 +64,3 @@ URL 和文件名使用小写 kebab-case。公共样式集中在 `styles.css`；�
 ## 八、Git 与测试
 
 提交信息使用 Conventional Commits。修改页面后至少运行 `npm test`；部署前再执行站内链接检查、`git diff --check` 和公网响应验证。
-
