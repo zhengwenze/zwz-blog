@@ -117,7 +117,7 @@ npm run serve
 
 ### 目录与配置
 
-- 网站目录：`/var/www/zwz-blog`
+- 网站目录：`/var/www/zwz-blog/current`（指向不可变 release 目录）
 - Nginx 配置：`/etc/nginx/conf.d/zwz-blog.conf`
 - 对外端口：TCP 80
 - 发布内容：仅同步 `dist/` 内文件
@@ -125,23 +125,16 @@ npm run serve
 ### 首次部署步骤
 
 ```bash
-# 服务器侧安装 Nginx（根据系统选择 dnf/yum/apt）
-dnf install -y nginx || yum install -y nginx
-
-mkdir -p /var/www/zwz-blog
-# 从本地把 dist/ 上传至 /var/www/zwz-blog/
-# 把 deploy/nginx.conf 上传至 /etc/nginx/conf.d/zwz-blog.conf
-
-nginx -t
-systemctl enable --now nginx
-curl -I http://127.0.0.1/
+curl -fsSL https://raw.githubusercontent.com/zhengwenze/zwz-blog/main/deploy/install.sh | bash
 ```
+
+脚本会安装缺失的 Git/Nginx、以 `git pull --ff-only` 更新源码、按提交 SHA 创建不可变 release、原子切换 `current` 软链接、验证 Nginx 配置并检查首页和文章页。
 
 随后在阿里云安全组与系统防火墙中确认 TCP 80 已放行，再从外网访问 `http://123.56.190.100`。
 
 ### 更新与回滚
 
-更新前保留 `/var/www/zwz-blog.previous`，将新 `dist/` 原子替换为正式目录并执行 `nginx -t`。若验证失败，恢复 previous 目录；Nginx 配置不通过时不得 reload。
+每次更新产生 `/var/www/zwz-blog/releases/<commit_sha>`，只有在文件准备完成后才原子切换 `current` 软链接。需要回滚时，把 `current` 重新指向上一 SHA 的 release 并重载 Nginx；Nginx 配置不通过时不得 reload。
 
 ## 七、HTTP 状态与故障定位
 
