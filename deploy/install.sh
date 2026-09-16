@@ -41,8 +41,17 @@ fi
 DEPLOY_SHA="$(git -C "${REPO_DIR}" rev-parse --verify HEAD)"
 RELEASE_DIR="${WEB_ROOT}/releases/${DEPLOY_SHA}"
 
-install -d -m 0755 "${RELEASE_DIR}"
-cp -a "${REPO_DIR}/dist/." "${RELEASE_DIR}/"
+if [[ ! -d "${RELEASE_DIR}" ]]; then
+  install -d -m 0755 "${RELEASE_DIR}"
+  cp -a "${REPO_DIR}/dist/." "${RELEASE_DIR}/"
+fi
+
+if [[ ! -f "${RELEASE_DIR}/deploy-meta.json" ]]; then
+  DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '{\n  "sha": "%s",\n  "run_id": "manual-install",\n  "deployed_at": "%s"\n}\n' \
+    "${DEPLOY_SHA}" "${DEPLOYED_AT}" > "${RELEASE_DIR}/deploy-meta.json"
+fi
+
 ln -sfn "${RELEASE_DIR}" "${WEB_ROOT}/current.next"
 mv -Tf "${WEB_ROOT}/current.next" "${WEB_ROOT}/current"
 install -m 0644 "${REPO_DIR}/deploy/nginx.conf" "${NGINX_CONFIG}"
@@ -53,7 +62,11 @@ fi
 
 nginx -t
 systemctl enable nginx
-systemctl restart nginx
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+else
+  systemctl start nginx
+fi
 
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
   firewall-cmd --permanent --add-service=http
@@ -62,6 +75,8 @@ fi
 
 curl --fail --silent --show-error --head -H 'Host: 123.56.190.100' http://127.0.0.1/ >/dev/null
 curl --fail --silent --show-error --head -H 'Host: 123.56.190.100' http://127.0.0.1/articles/evidence-driven-ai-infra.html >/dev/null
+curl --fail --silent --show-error -H 'Host: 123.56.190.100' http://127.0.0.1/deploy-meta.json \
+  | grep -Fq "${DEPLOY_SHA}"
 
 printf 'DEPLOYED_SHA=%s\n' "${DEPLOY_SHA}"
 printf 'PUBLIC_URL=http://123.56.190.100\n'

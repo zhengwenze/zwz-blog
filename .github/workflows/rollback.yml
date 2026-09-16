@@ -1,0 +1,175 @@
+name: Roll back production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full 40-character SHA of an existing release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Roll back production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+    steps:
+      - name: Check out rollback script
+        uses: actions/checkout@v4
+
+      - name: Validate requested release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'release_sha must be a full 40-character lowercase Git SHA.\n' >&2
+            exit 1
+          fi
+
+      - name: Configure verified SSH connection
+        id: ssh
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          for name in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER PUBLIC_URL SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'Required production setting is empty: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "${DEPLOY_PORT}" =~ ^[0-9]+$ ]] || (( DEPLOY_PORT < 1 || DEPLOY_PORT > 65535 )); then
+            printf 'DEPLOY_PORT must be an integer from 1 to 65535.\n' >&2
+            exit 1
+          fi
+
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > "${HOME}/.ssh/deploy_key"
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/deploy_key" "${HOME}/.ssh/known_hosts"
+          ssh-keygen -y -f "${HOME}/.ssh/deploy_key" >/dev/null
+
+          {
+            printf 'Host production\n'
+            printf '  HostName %s\n' "${DEPLOY_HOST}"
+            printf '  Port %s\n' "${DEPLOY_PORT}"
+            printf '  User %s\n' "${DEPLOY_USER}"
+            printf '  IdentityFile %s/.ssh/deploy_key\n' "${HOME}"
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  UserKnownHostsFile %s/.ssh/known_hosts\n' "${HOME}"
+            printf '  ConnectTimeout 15\n'
+            printf '  ServerAliveInterval 15\n'
+            printf '  ServerAliveCountMax 2\n'
+          } > "${HOME}/.ssh/config"
+          chmod 0600 "${HOME}/.ssh/config"
+
+          ssh production true
+
+      - name: Activate requested release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(ssh production "bash -s -- rollback '${RELEASE_SHA}'" < deploy/release.sh)"
+          printf '%s\n' "${output}"
+
+          previous_sha="$(printf '%s\n' "${output}" | sed -n 's/^PREVIOUS_RELEASE_SHA=//p' | tail -n 1)"
+          deployed_sha="$(printf '%s\n' "${output}" | sed -n 's/^DEPLOYED_SHA=//p' | tail -n 1)"
+          if [[ "${previous_sha}" != "none" && ! "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'Remote script returned an invalid previous release SHA.\n' >&2
+            exit 1
+          fi
+          if [[ "${deployed_sha}" != "${RELEASE_SHA}" ]]; then
+            printf 'Remote script did not confirm the requested release SHA.\n' >&2
+            exit 1
+          fi
+
+          printf 'previous_sha=%s\n' "${previous_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'deployed_sha=%s\n' "${deployed_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify production from the GitHub runner
+        env:
+          EXPECTED_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          check_dir="$(mktemp -d)"
+          trap 'rm -rf "${check_dir}"' EXIT
+          base_url="${PUBLIC_URL%/}"
+
+          check_200() {
+            local path="$1"
+            local output="$2"
+            local status
+            if ! status="$(curl --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+              --output "${output}" --write-out '%{http_code}' "${base_url}${path}")"; then
+              printf 'Public request failed: %s\n' "${path}" >&2
+              return 1
+            fi
+            if [[ "${status}" != "200" ]]; then
+              printf 'Expected HTTP 200 for %s, got %s.\n' "${path}" "${status}" >&2
+              return 1
+            fi
+          }
+
+          check_200 / "${check_dir}/index.html"
+          check_200 /articles/evidence-driven-ai-infra.html "${check_dir}/article.html"
+          check_200 /assets/styles.css "${check_dir}/styles.css"
+          check_200 /deploy-meta.json "${check_dir}/deploy-meta.json"
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const metadata = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (metadata.sha !== process.env.EXPECTED_SHA) {
+              throw new Error(`Expected ${process.env.EXPECTED_SHA}, received ${metadata.sha}`);
+            }
+          ' "${check_dir}/deploy-meta.json"
+
+      - name: Restore release active before failed public verification
+        if: failure() && steps.release.outputs.previous_sha != '' && steps.release.outputs.previous_sha != 'none'
+        env:
+          PREVIOUS_SHA: ${{ steps.release.outputs.previous_sha }}
+        run: |
+          set -euo pipefail
+          ssh production "bash -s -- rollback '${PREVIOUS_SHA}'" < deploy/release.sh
+
+          check_dir="$(mktemp -d)"
+          trap 'rm -rf "${check_dir}"' EXIT
+          base_url="${PUBLIC_URL%/}"
+          check_200() {
+            local path="$1"
+            local output="$2"
+            local status
+            status="$(curl --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+              --output "${output}" --write-out '%{http_code}' "${base_url}${path}")"
+            [[ "${status}" == "200" ]]
+          }
+          check_200 / "${check_dir}/index.html"
+          check_200 /articles/evidence-driven-ai-infra.html "${check_dir}/article.html"
+          check_200 /assets/styles.css "${check_dir}/styles.css"
+          check_200 /deploy-meta.json "${check_dir}/deploy-meta.json"
+          EXPECTED_SHA="${PREVIOUS_SHA}" node -e '
+            const { readFileSync } = require("node:fs");
+            const metadata = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (metadata.sha !== process.env.EXPECTED_SHA) process.exit(1);
+          ' "${check_dir}/deploy-meta.json"

@@ -1,0 +1,256 @@
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Validate and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test static site
+        run: npm test
+
+      - name: Check deployment scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' script; do
+            bash -n "${script}"
+          done < <(find deploy -maxdepth 1 -type f -name '*.sh' -print0)
+
+      - name: Test release operations in an isolated directory
+        run: node --test tests/deploy.test.mjs
+
+      - name: Add deployment metadata
+        if: github.event_name != 'pull_request'
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          node <<'NODE'
+          const { writeFileSync } = require("node:fs");
+
+          const metadata = {
+            sha: process.env.RELEASE_SHA,
+            run_id: process.env.RUN_ID,
+            deployed_at: new Date().toISOString(),
+          };
+
+          writeFileSync("dist/deploy-meta.json", `${JSON.stringify(metadata, null, 2)}\n`);
+          NODE
+
+      - name: Build immutable release archive
+        if: github.event_name != 'pull_request'
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          archive="release-${RELEASE_SHA}.tar.gz"
+          tar -C dist -czf "${archive}" .
+          sha256sum "${archive}" > "${archive}.sha256"
+
+      - name: Upload release artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            release-${{ github.sha }}.tar.gz
+            release-${{ github.sha }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy production
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+      ARCHIVE_NAME: release-${{ github.sha }}.tar.gz
+      REMOTE_DIR: /var/www/zwz-blog/incoming/${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+    steps:
+      - name: Check out deployment script
+        uses: actions/checkout@v4
+
+      - name: Download tested release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: release-bundle
+
+      - name: Configure verified SSH connection
+        id: ssh
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          for name in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER PUBLIC_URL SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'Required production setting is empty: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "${DEPLOY_PORT}" =~ ^[0-9]+$ ]] || (( DEPLOY_PORT < 1 || DEPLOY_PORT > 65535 )); then
+            printf 'DEPLOY_PORT must be an integer from 1 to 65535.\n' >&2
+            exit 1
+          fi
+
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > "${HOME}/.ssh/deploy_key"
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/deploy_key" "${HOME}/.ssh/known_hosts"
+          ssh-keygen -y -f "${HOME}/.ssh/deploy_key" >/dev/null
+
+          {
+            printf 'Host production\n'
+            printf '  HostName %s\n' "${DEPLOY_HOST}"
+            printf '  Port %s\n' "${DEPLOY_PORT}"
+            printf '  User %s\n' "${DEPLOY_USER}"
+            printf '  IdentityFile %s/.ssh/deploy_key\n' "${HOME}"
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  StrictHostKeyChecking yes\n'
+            printf '  UserKnownHostsFile %s/.ssh/known_hosts\n' "${HOME}"
+            printf '  ConnectTimeout 15\n'
+            printf '  ServerAliveInterval 15\n'
+            printf '  ServerAliveCountMax 2\n'
+          } > "${HOME}/.ssh/config"
+          chmod 0600 "${HOME}/.ssh/config"
+
+          ssh production true
+
+      - name: Upload immutable release bundle
+        run: |
+          set -euo pipefail
+          ssh production "mkdir -p '${REMOTE_DIR}'"
+          scp \
+            "release-bundle/${ARCHIVE_NAME}" \
+            "release-bundle/${ARCHIVE_NAME}.sha256" \
+            "production:${REMOTE_DIR}/"
+
+      - name: Atomically activate release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$({
+            ssh production \
+              "bash -s -- deploy '${GITHUB_SHA}' '${REMOTE_DIR}/${ARCHIVE_NAME}' '${REMOTE_DIR}/${ARCHIVE_NAME}.sha256'" \
+              < deploy/release.sh
+          })"
+          printf '%s\n' "${output}"
+
+          previous_sha="$(printf '%s\n' "${output}" | sed -n 's/^PREVIOUS_RELEASE_SHA=//p' | tail -n 1)"
+          deployed_sha="$(printf '%s\n' "${output}" | sed -n 's/^DEPLOYED_SHA=//p' | tail -n 1)"
+          if [[ "${previous_sha}" != "none" && ! "${previous_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'Remote script returned an invalid previous release SHA.\n' >&2
+            exit 1
+          fi
+          if [[ "${deployed_sha}" != "${GITHUB_SHA}" ]]; then
+            printf 'Remote script did not confirm the requested release SHA.\n' >&2
+            exit 1
+          fi
+
+          printf 'previous_sha=%s\n' "${previous_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'deployed_sha=%s\n' "${deployed_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify production from the GitHub runner
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          check_dir="$(mktemp -d)"
+          trap 'rm -rf "${check_dir}"' EXIT
+          base_url="${PUBLIC_URL%/}"
+
+          check_200() {
+            local path="$1"
+            local output="$2"
+            local status
+            if ! status="$(curl --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+              --output "${output}" --write-out '%{http_code}' "${base_url}${path}")"; then
+              printf 'Public request failed: %s\n' "${path}" >&2
+              return 1
+            fi
+            if [[ "${status}" != "200" ]]; then
+              printf 'Expected HTTP 200 for %s, got %s.\n' "${path}" "${status}" >&2
+              return 1
+            fi
+          }
+
+          check_200 / "${check_dir}/index.html"
+          check_200 /articles/evidence-driven-ai-infra.html "${check_dir}/article.html"
+          check_200 /assets/styles.css "${check_dir}/styles.css"
+          check_200 /deploy-meta.json "${check_dir}/deploy-meta.json"
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const metadata = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (metadata.sha !== process.env.EXPECTED_SHA) {
+              throw new Error(`Expected ${process.env.EXPECTED_SHA}, received ${metadata.sha}`);
+            }
+          ' "${check_dir}/deploy-meta.json"
+
+      - name: Restore previous release after public verification failure
+        if: failure() && steps.release.outputs.previous_sha != '' && steps.release.outputs.previous_sha != 'none'
+        env:
+          PREVIOUS_SHA: ${{ steps.release.outputs.previous_sha }}
+        run: |
+          set -euo pipefail
+          ssh production "bash -s -- rollback '${PREVIOUS_SHA}'" < deploy/release.sh
+
+          check_dir="$(mktemp -d)"
+          trap 'rm -rf "${check_dir}"' EXIT
+          base_url="${PUBLIC_URL%/}"
+          check_200() {
+            local path="$1"
+            local output="$2"
+            local status
+            status="$(curl --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 \
+              --output "${output}" --write-out '%{http_code}' "${base_url}${path}")"
+            [[ "${status}" == "200" ]]
+          }
+          check_200 / "${check_dir}/index.html"
+          check_200 /articles/evidence-driven-ai-infra.html "${check_dir}/article.html"
+          check_200 /assets/styles.css "${check_dir}/styles.css"
+          check_200 /deploy-meta.json "${check_dir}/deploy-meta.json"
+          EXPECTED_SHA="${PREVIOUS_SHA}" node -e '
+            const { readFileSync } = require("node:fs");
+            const metadata = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (metadata.sha !== process.env.EXPECTED_SHA) process.exit(1);
+          ' "${check_dir}/deploy-meta.json"
+
+      - name: Remove uploaded bundle
+        if: always() && steps.ssh.outcome == 'success'
+        run: ssh production "rm -f -- '${REMOTE_DIR}/${ARCHIVE_NAME}' '${REMOTE_DIR}/${ARCHIVE_NAME}.sha256'; rmdir '${REMOTE_DIR}' 2>/dev/null || true" || true
