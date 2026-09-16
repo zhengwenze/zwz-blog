@@ -1,0 +1,11 @@
+{
+  "name": "zwz-blog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zheng Wenze's static personal blog",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 4173 --directory dist"
+  }
+}
+

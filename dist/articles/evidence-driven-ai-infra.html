@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="一条把 AI Infra 理论、代码、实验和项目表达串成可验证证据的学习路径。">
+    <meta name="theme-color" content="#0d2b45">
+    <title>把 AI Infra 学习变成可验证的工程证据｜郑文泽</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d2b45'/%3E%3Cpath d='M17 20h30L26 44h21' fill='none' stroke='%2338e0bd' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#article-content">跳到文章正文</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="返回郑文泽个人博客首页">
+        <span class="brand-mark" aria-hidden="true">ZWZ</span>
+        <span>郑文泽 / ZWZ</span>
+      </a>
+      <nav class="site-nav" aria-label="文章导航">
+        <a href="/">首页</a>
+        <a href="/#writing">文章</a>
+        <a href="https://github.com/zhengwenze/zwz-blog">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="article-content" class="article-shell">
+      <header class="article-header">
+        <span class="article-number" aria-hidden="true">01</span>
+        <div>
+          <p class="article-meta">学习方法 · 2026.09.16 · 约 6 分钟</p>
+          <h1>把 AI Infra 学习变成可验证的工程证据</h1>
+          <p class="article-deck">对于刚进入大模型推理方向的人，最危险的不是“不知道”，而是把“看过”“跑通”和“证明了”混成同一件事。</p>
+        </div>
+      </header>
+
+      <article class="article-body">
+        <p>AI Infra 的知识密度很高：Transformer、KV Cache、Continuous Batching、PagedAttention、CUDA、通信与调度，每一个词都可以继续展开。只靠收藏资料，很容易得到一种“每天都在学”的满足感，却很难回答面试中最朴素的问题：你真正理解了什么？改了什么？怎么证明它是对的？</p>
+
+        <blockquote>
+          <p>我更愿意把学习拆成一条闭环：理论理解 → 对照代码 → 动手实验 → 项目表达 → 分阶段投递。</p>
+        </blockquote>
+
+        <h2>一、先建立最小但完整的概念链</h2>
+        <p>学习推理系统，不必一开始就把所有 CUDA 细节吃透。更有效的起点，是先解释一条请求为什么会慢：输入经过 Tokenizer 后进入 Transformer；Prefill 一次处理提示词并生成 KV Cache；Decode 逐 token 生成，频繁读取缓存；调度器决定哪些请求在这一轮获得计算资源。</p>
+        <p>这条链会自然引出几个指标：TTFT 描述首 token 等待时间，TPOT 描述后续 token 的平均间隔，端到端时延描述用户总等待，Goodput 则进一步要求请求满足服务目标。概念之间有因果关系，而不是一张需要背诵的名词表。</p>
+
+        <h2>二、让概念在代码里找到位置</h2>
+        <p>理解“调度器负责调度”还不够。下一步要追踪一次真实请求：</p>
+        <ol>
+          <li>请求进入等待队列，携带提示词长度、生成上限等信息。</li>
+          <li>调度器检查 token 预算、序列预算和 KV Block 是否足够。</li>
+          <li>Model Runner 执行 Prefill 或 Decode，采样器选择下一 token。</li>
+          <li>引擎更新请求状态，完成则回收缓存，否则进入下一轮。</li>
+          <li>在线服务把新 token 流式返回给调用方。</li>
+        </ol>
+        <p>代码追踪的产物不应该只是“我读过这个文件”，而应是一张调用链、几个关键数据结构，以及每个状态变化的触发条件。这样遇到调度策略或内存问题时，才知道应该从哪里下手。</p>
+
+        <h2>三、实验不是跑出一个数字</h2>
+        <p>性能结论至少需要一个可以比较的 A/B 设计。模型、请求集合、随机种子、软件版本、并发配置和硬件必须固定；要有预热、重复次数、原始请求记录和 GPU 遥测。只有这样，“策略 B 更快”才可能被复查。</p>
+
+        <table class="evidence-table">
+          <thead>
+            <tr>
+              <th>证据状态</th>
+              <th>可以说明</th>
+              <th>不能说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Implemented</td>
+              <td>功能路径已实现</td>
+              <td>性能已经提升</td>
+            </tr>
+            <tr>
+              <td>CPU Verified</td>
+              <td>协议或控制逻辑通过</td>
+              <td>GPU 时延和吞吐结论</td>
+            </tr>
+            <tr>
+              <td>GPU Pending</td>
+              <td>实验方案已定义</td>
+              <td>任何百分比改进</td>
+            </tr>
+            <tr>
+              <td>GPU Verified</td>
+              <td>固定配置下的实测结果</td>
+              <td>对所有模型和硬件普遍成立</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>四、把项目表达写成证据链</h2>
+        <p>一个可信的项目描述通常包含四层：上游原本有什么、自己新增了什么、怎样验证正确性、还有哪些结论没有证据。这样的表达可能没有“大幅提升 50%”那么吸睛，却能经得住继续追问。</p>
+        <p>例如，与其说“实现了高性能调度器”，不如说明：基于已有引擎增加了在线调度策略；用单元测试验证预算与状态转换；设计了固定 trace 的 GPU A/B；在原始证据生成之前，TTFT、TPOT 和 Goodput 结论保持为 GPU Pending。</p>
+
+        <h2>五、每周只追求一个完整闭环</h2>
+        <p>可以给每周设置一个可验收主题：理解一个机制，定位对应代码，完成一个小实验，整理一页项目说明，并准备两分钟口述。完成闭环比同时铺开十个方向更重要。</p>
+        <p>长期来看，真正能积累下来的不是“学过多少名词”，而是越来越多能够被别人复现、质疑和确认的工程证据。对初学者来说，这也是从学习者走向工程师最可靠的路径。</p>
+
+        <footer class="article-end">
+          <p>下一篇，我计划拆解一次推理请求如何经过 waiting queue、KV Block 分配、Prefill / Decode 与流式返回。</p>
+          <a href="/">← 返回首页</a>
+        </footer>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 郑文泽</span>
+      <a href="https://github.com/zhengwenze/zwz-blog">GitHub · zwz-blog</a>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="郑文泽的个人博客，记录 AI Infra、大模型推理系统与工程实践。">
+    <meta name="theme-color" content="#0d2b45">
+    <title>郑文泽｜AI Infra 学习与工程实践</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d2b45'/%3E%3Cpath d='M17 20h30L26 44h21' fill='none' stroke='%2338e0bd' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="郑文泽个人博客首页">
+        <span class="brand-mark" aria-hidden="true">ZWZ</span>
+        <span>郑文泽 / ZWZ</span>
+      </a>
+      <nav class="site-nav" aria-label="主导航">
+        <a href="#about">关于</a>
+        <a href="#work">实践</a>
+        <a href="#writing">文章</a>
+        <a href="https://github.com/zhengwenze/zwz-blog">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main-content" class="home-shell">
+      <aside class="profile-rail" aria-labelledby="profile-name">
+        <p class="eyebrow">AI Infra Learner</p>
+        <h1 id="profile-name">郑文泽</h1>
+        <p class="profile-summary">软件工程学生，正在学习大模型推理系统，把理论、代码与实验整理成可复核的工程证据。</p>
+        <p class="availability">持续学习与构建中</p>
+      </aside>
+
+      <div class="content-column">
+        <section id="about" class="intro" aria-labelledby="intro-title">
+          <h2 id="intro-title" class="intro-title">理解系统，也<em>验证</em>系统。</h2>
+          <p class="intro-lead">我关注 Prefill / Decode、KV Cache、调度与推理性能评估。这里不堆砌结论，只记录问题怎样被拆开、实现怎样被验证，以及证据还缺在哪里。</p>
+        </section>
+
+        <section class="section" aria-labelledby="focus-title">
+          <div class="section-heading">
+            <span class="section-index">01 / Focus</span>
+            <h2 id="focus-title">当前关注</h2>
+          </div>
+          <div class="focus-grid">
+            <article class="focus-card">
+              <span class="code-label">System</span>
+              <strong>推理请求路径</strong>
+              <p>从 Tokenizer、Prefill / Decode 到 KV Cache 和流式返回，追踪一次请求真正经过的组件。</p>
+            </article>
+            <article class="focus-card">
+              <span class="code-label">Metrics</span>
+              <strong>性能度量</strong>
+              <p>区分 TTFT、TPOT、吞吐与 Goodput，用固定配置和原始记录保证实验可以复查。</p>
+            </article>
+            <article class="focus-card">
+              <span class="code-label">Method</span>
+              <strong>证据边界</strong>
+              <p>把“已实现”“CPU 验证”“GPU 待验证”分开，避免把功能存在误写成性能提升。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="work" class="section" aria-labelledby="work-title">
+          <div class="section-heading">
+            <span class="section-index">02 / Work</span>
+            <h2 id="work-title">实践方向</h2>
+          </div>
+          <div class="project-list">
+            <div class="project-row">
+              <span class="project-name">推理调度</span>
+              <p>阅读并扩展轻量推理引擎的在线调度路径，关注新请求与运行中请求的延迟权衡。</p>
+              <span class="project-state">持续验证</span>
+            </div>
+            <div class="project-row">
+              <span class="project-name">性能评估</span>
+              <p>围绕请求负载、流式指标、验证门禁和证据归档，建立可比较的评测流程。</p>
+              <span class="project-state">工程实践</span>
+            </div>
+            <div class="project-row">
+              <span class="project-name">系统基础</span>
+              <p>补齐 Linux、C++、CUDA 与分布式系统基础，把抽象概念落到代码路径和实验。</p>
+              <span class="project-state">学习中</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="writing" class="section" aria-labelledby="writing-title">
+          <div class="section-heading">
+            <span class="section-index">03 / Writing</span>
+            <h2 id="writing-title">最近文章</h2>
+          </div>
+          <a class="article-card" href="/articles/evidence-driven-ai-infra.html">
+            <span class="article-meta">2026.09.16 · 约 6 分钟</span>
+            <h3>把 AI Infra 学习变成可验证的工程证据</h3>
+            <p>从理论理解到代码追踪，再到实验与项目表达：一条避免“学了很多，却无法证明”的学习闭环。</p>
+            <span class="read-more">阅读全文 →</span>
+          </a>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 郑文泽</span>
+      <a href="https://github.com/zhengwenze/zwz-blog">GitHub · zwz-blog</a>
+    </footer>
+  </body>
+</html>
