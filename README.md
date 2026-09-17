@@ -26,7 +26,7 @@ npm test
 
 生产环境使用 Nginx 托管不可变的 `dist/` 发布制品。目标流水线在 Pull Request 上执行测试，在 `main` 通过测试后构建制品、通过低权限 `deploy` 用户发布，并在健康检查失败时自动回滚。
 
-CI/CD 仓库实现、GitHub `production` Environment 和生产服务器初始化已完成；工作流尚未推送首跑，自动发布/回滚端到端验收待完成。变量、密钥、服务器初始化、自动/手动回滚和故障定位见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)；公开部署元数据契约见 [docs/ZWZ_BLOG_API.md](docs/ZWZ_BLOG_API.md)；视觉与代码约定见 [docs/ZWZ_BLOG_STYLE.md](docs/ZWZ_BLOG_STYLE.md)。
+CI/CD 已完成生产验收：PR 只运行 CI，`main` 自动发布，失败版本在隔离测试中自动恢复，手动回滚与并发串行均已实际演练。变量、密钥、服务器初始化、自动/手动回滚和验收证据见 [docs/DEV_DOCUMENT.md](docs/DEV_DOCUMENT.md)；公开部署元数据契约见 [docs/ZWZ_BLOG_API.md](docs/ZWZ_BLOG_API.md)；视觉与代码约定见 [docs/ZWZ_BLOG_STYLE.md](docs/ZWZ_BLOG_STYLE.md)。
 
 ## 项目结构
 

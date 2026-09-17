@@ -19,7 +19,8 @@ All notable changes to this project are documented in this file.
 
 - Repository tests and isolated release-script tests are implemented.
 - Production account permissions, SSH hardening, Nginx cache behavior, and GitHub `production` environment configuration have been verified.
-- The first pushed Actions run, automatic deployment, failure rollback, manual rollback, and concurrency exercise remain pending; they are not claimed as production-verified.
+- PR-only CI, automatic production deployment, public SHA verification, manual rollback, latest-release restoration, and serialized concurrent deployments have been verified with GitHub Actions runs.
+- Automatic restoration after a failed health check is verified by the isolated release-script test executed in CI; no artificial public outage was introduced.
 
 ## [1.0.0.0] - 2026-09-16
 
